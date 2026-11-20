@@ -153,7 +153,7 @@
    * 2. CONSTANTS & APPLICATION STATE
    * ========================================================================== */
   var SERVICE_HOST = "127.0.0.1";
-  var SERVICE_PORT = 8092;
+  var SERVICE_PORT = 8093;
   var WS_URL = "ws://" + SERVICE_HOST + ":" + SERVICE_PORT;
   var HTTP_BASE = "http://" + SERVICE_HOST + ":" + SERVICE_PORT;
   var HLS_CDN_URL = "https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js";
@@ -298,6 +298,30 @@
     }, 600);
   }
 
+  var nudgedTizenBrewService = false;
+  function nudgeTizenBrewToStartService() {
+    if (nudgedTizenBrewService) return;
+    nudgedTizenBrewService = true;
+    try {
+      var tbWs = new WebSocket("ws://127.0.0.1:8081");
+      tbWs.onopen = function () {
+        try {
+          tbWs.send(JSON.stringify({
+            type: 6,
+            payload: {
+              fullName: "gh/AllanCFE/my-anime-tizenbrew@1.0.1",
+              name: "AllanCFE/my-anime-tizenbrew",
+              serviceFile: "dist/service.js"
+            }
+          }));
+        } catch (e) {}
+        setTimeout(function () {
+          try { tbWs.close(); } catch (e2) {}
+        }, 1000);
+      };
+    } catch (e) {}
+  }
+
   function callService(action, payload, callback) {
     var reqId = "req_" + (++wsReqCounter) + "_" + Date.now();
     var done = false;
@@ -320,24 +344,26 @@
         }));
       } catch (e) {
         delete wsCallbacks[reqId];
-        callHttpRpcFallback(reqId, action, payload, finish);
+        callHttpRpcFallback(reqId, action, payload, finish, 0);
         return;
       }
 
       /* Timeout fallback to HTTP RPC if WS doesn't respond in 14s */
       setTimeout(function () {
         if (!done) {
-          callHttpRpcFallback(reqId, action, payload, finish);
+          callHttpRpcFallback(reqId, action, payload, finish, 0);
         }
       }, 14000);
       return;
     }
 
-    /* Fallback to HTTP /rpc while WebSocket is connecting */
-    callHttpRpcFallback(reqId, action, payload, finish);
+    /* Fallback to HTTP /rpc with automatic startup retries while service.js boots */
+    callHttpRpcFallback(reqId, action, payload, finish, 0);
   }
 
-  function callHttpRpcFallback(reqId, action, payload, callback) {
+  function callHttpRpcFallback(reqId, action, payload, callback, attempt) {
+    var curAttempt = attempt || 0;
+    var maxAttempts = 12;
     try {
       var xhr = new XMLHttpRequest();
       xhr.open("POST", HTTP_BASE + "/rpc", true);
@@ -350,25 +376,36 @@
               var res = JSON.parse(xhr.responseText);
               state.wsConnected = true;
               updateStatusBadge();
+              connectWebSocket();
               if (res.ok) callback(null, res.data);
               else callback(new Error(res.error || "RPC error"));
             } catch (e) {
               callback(e);
             }
+          } else if (xhr.status === 0 && curAttempt < maxAttempts) {
+            if (curAttempt === 1) {
+              nudgeTizenBrewToStartService();
+            }
+            setTimeout(function () {
+              callHttpRpcFallback(reqId, action, payload, callback, curAttempt + 1);
+            }, 500);
           } else {
             callback(new Error("Service unavailable on 127.0.0.1:" + SERVICE_PORT));
           }
         }
-      };
-      xhr.onerror = function () {
-        callback(new Error("Connecting to on-TV service..."));
       };
       xhr.ontimeout = function () {
         callback(new Error("Request timed out"));
       };
       xhr.send(JSON.stringify({ id: reqId, action: action, payload: payload || {} }));
     } catch (e) {
-      callback(e);
+      if (curAttempt < maxAttempts) {
+        setTimeout(function () {
+          callHttpRpcFallback(reqId, action, payload, callback, curAttempt + 1);
+        }, 500);
+      } else {
+        callback(e);
+      }
     }
   }
 
@@ -2238,6 +2275,7 @@
     initDom();
     window.addEventListener("keydown", handleKeyDown, true);
     render();
+    nudgeTizenBrewToStartService();
     connectWebSocket();
     fetchHomeData();
   }

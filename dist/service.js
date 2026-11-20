@@ -1,5 +1,5 @@
 /*
- * My Anime TizenBrew - On-TV Background Node.js Service (ES5 / Node.js v4.4.3 compatible)
+ * My Anime TizenBrew - On-TV Background Node.js Service (ES5 / Node.js v4.4.3 VM-realm safe)
  * Runs inside TizenBrew's internal Node.js service on the Samsung Tizen 3.0 TV (127.0.0.1:8092).
  * - Connects to anizone.to & *.vid-cdn.xyz (GlobalSign Root CA - trusted by Tizen 3.0 / 2017)
  * - Exposes WebSocket bridge (ws://127.0.0.1:8092) + HTTP RPC fallback (http://127.0.0.1:8092/rpc)
@@ -10,54 +10,129 @@
 (function () {
   "use strict";
 
-  /* ES5 Polyfills for Node.js v4.4.3 */
-  if (!Object.values) {
-    Object.values = function (obj) {
-      if (obj == null) throw new TypeError("Cannot convert undefined or null to object");
-      var o = Object(obj), keys = Object.keys(o), res = new Array(keys.length);
-      for (var i = 0; i < keys.length; i++) res[i] = o[keys[i]];
-      return res;
-    };
-  }
-  if (!Object.entries) {
-    Object.entries = function (obj) {
-      if (obj == null) throw new TypeError("Cannot convert undefined or null to object");
-      var o = Object(obj), keys = Object.keys(o), res = new Array(keys.length);
-      for (var i = 0; i < keys.length; i++) res[i] = [keys[i], o[keys[i]]];
-      return res;
-    };
-  }
-  if (!Array.prototype.includes) {
-    Array.prototype.includes = function (searchElement, fromIndex) {
-      if (this == null) throw new TypeError('"this" is null or not defined');
-      var o = Object(this), len = o.length >>> 0;
-      if (len === 0) return false;
-      var n = fromIndex | 0;
-      var k = Math.max(n >= 0 ? n : len - Math.abs(n), 0);
-      while (k < len) {
-        if (o[k] === searchElement || (typeof o[k] === "number" && typeof searchElement === "number" && isNaN(o[k]) && isNaN(searchElement))) return true;
-        k++;
-      }
-      return false;
-    };
-  }
-  if (!String.prototype.padStart) {
-    String.prototype.padStart = function (targetLength, padString) {
-      var str = String(this);
-      targetLength = targetLength >> 0;
-      padString = String(typeof padString !== "undefined" ? padString : " ");
-      if (str.length >= targetLength) return str;
-      targetLength = targetLength - str.length;
-      while (padString.length < targetLength) padString += padString;
-      return padString.slice(0, targetLength) + str;
-    };
+  /*
+   * IMPORTANT FOR TIZENBREW ON TIZEN 3.0 (Node.js v4.4.3):
+   * TizenBrew's serviceLauncher.js copies global.Array / global.Object / global.String into the
+   * sandbox before calling vm.createContext(sandbox). Therefore, array literals `[]` and string
+   * literals `""` inside vm.runInContext inherit from `([]).constructor.prototype` and
+   * `("").constructor.prototype` (the inner VM realm's intrinsics), NOT `Array.prototype`!
+   * We both polyfill both realms AND use pure ES3/ES5 helper functions below.
+   */
+  var InnerArrayProto = ([]).constructor.prototype;
+  var InnerStringProto = ("").constructor.prototype;
+  var InnerObject = ({}).constructor;
+
+  function polyfillArrayIncludes(proto) {
+    if (proto && !proto.includes) {
+      proto.includes = function (searchElement, fromIndex) {
+        if (this == null) throw new TypeError('"this" is null or not defined');
+        var o = Object(this), len = o.length >>> 0;
+        if (len === 0) return false;
+        var n = fromIndex | 0;
+        var k = Math.max(n >= 0 ? n : len - Math.abs(n), 0);
+        while (k < len) {
+          if (o[k] === searchElement || (typeof o[k] === "number" && typeof searchElement === "number" && isNaN(o[k]) && isNaN(searchElement))) return true;
+          k++;
+        }
+        return false;
+      };
+    }
   }
 
-  if (typeof global !== "undefined" && global.__MY_ANIME_SERVICE_SERVER__) {
-    try {
-      global.__MY_ANIME_SERVICE_SERVER__.close();
-    } catch (e) {}
+  function polyfillStringPadStart(proto) {
+    if (proto && !proto.padStart) {
+      proto.padStart = function (targetLength, padString) {
+        var str = String(this);
+        targetLength = targetLength >> 0;
+        padString = String(typeof padString !== "undefined" ? padString : " ");
+        if (str.length >= targetLength) return str;
+        targetLength = targetLength - str.length;
+        while (padString.length < targetLength) padString += padString;
+        return padString.slice(0, targetLength) + str;
+      };
+    }
   }
+
+  function polyfillObjectMethods(ObjCtor) {
+    if (!ObjCtor) return;
+    if (!ObjCtor.values) {
+      ObjCtor.values = function (obj) {
+        if (obj == null) throw new TypeError("Cannot convert undefined or null to object");
+        var res = [];
+        for (var k in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, k)) res.push(obj[k]);
+        }
+        return res;
+      };
+    }
+    if (!ObjCtor.entries) {
+      ObjCtor.entries = function (obj) {
+        if (obj == null) throw new TypeError("Cannot convert undefined or null to object");
+        var res = [];
+        for (var k in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, k)) res.push([k, obj[k]]);
+        }
+        return res;
+      };
+    }
+  }
+
+  polyfillArrayIncludes(Array.prototype);
+  polyfillArrayIncludes(InnerArrayProto);
+  polyfillStringPadStart(String.prototype);
+  polyfillStringPadStart(InnerStringProto);
+  polyfillObjectMethods(Object);
+  polyfillObjectMethods(InnerObject);
+
+  /* Cross-realm safe ES5 helper functions */
+  function isArr(v) {
+    return !!(v && (Array.isArray(v) || Object.prototype.toString.call(v) === "[object Array]" || (typeof v === "object" && typeof v.length === "number" && typeof v.slice === "function" && !(v instanceof Buffer))));
+  }
+
+  function arrContains(arr, item) {
+    if (!arr) return false;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] === item) return true;
+    }
+    return false;
+  }
+
+  function objKeys(obj) {
+    var out = [];
+    if (!obj) return out;
+    for (var k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(k);
+    }
+    return out;
+  }
+
+  function objValues(obj) {
+    var out = [];
+    if (!obj) return out;
+    for (var k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(obj[k]);
+    }
+    return out;
+  }
+
+  /* Prevent uncaught errors inside async streams from crashing TizenBrew's Node process */
+  try {
+    if (typeof process !== "undefined" && process) {
+      if (process.__MY_ANIME_SERVICE_SERVER__) {
+        try {
+          process.__MY_ANIME_SERVICE_SERVER__.close();
+        } catch (e0) {}
+      }
+      if (typeof process.on === "function" && !process.__myAnimeUncaughtInstalled) {
+        process.__myAnimeUncaughtInstalled = true;
+        process.on("uncaughtException", function (err) {
+          try {
+            console.error("[MyAnimeService] Caught exception:", err && (err.stack || err.message || err));
+          } catch (e) {}
+        });
+      }
+    }
+  } catch (e) {}
 
   var http = require("http");
   var https = require("https");
@@ -67,7 +142,7 @@
   var crypto = require("crypto");
   var zlib = require("zlib");
 
-  var PORT = 8092;
+  var PORT = 8093;
   var HOST = "127.0.0.1";
   var SOURCE_ORIGIN = "https://anizone.to";
   var SOURCE_REFERER = "https://anizone.to/";
@@ -109,10 +184,10 @@
       if (fs.existsSync(HISTORY_FILE)) {
         var raw = fs.readFileSync(HISTORY_FILE, "utf8");
         var parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.items)) {
+        if (parsed && isArr(parsed.items)) {
           return parsed;
         }
-        if (Array.isArray(parsed)) {
+        if (isArr(parsed)) {
           return { items: parsed };
         }
       }
@@ -123,12 +198,12 @@
   function saveHistoryData(historyObj) {
     try {
       var data = {
-        items: Array.isArray(historyObj.items) ? historyObj.items.slice(0, 100) : []
+        items: (historyObj && isArr(historyObj.items)) ? historyObj.items.slice(0, 100) : []
       };
       fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2), "utf8");
       return data;
     } catch (e) {
-      return historyObj;
+      return historyObj || { items: [] };
     }
   }
 
@@ -233,7 +308,7 @@
       "Origin": SOURCE_ORIGIN
     };
     if (extraHeaders) {
-      var hKeys = Object.keys(extraHeaders);
+      var hKeys = objKeys(extraHeaders);
       for (var i = 0; i < hKeys.length; i++) {
         headers[hKeys[i]] = extraHeaders[hKeys[i]];
       }
@@ -253,7 +328,11 @@
     function finish(err, resData) {
       if (done) return;
       done = true;
-      callback(err, resData);
+      try {
+        callback(err, resData);
+      } catch (cbErr) {
+        console.error("[MyAnimeService] Callback error:", cbErr);
+      }
     }
 
     var req = transport.request(reqOpts, function (res) {
@@ -306,7 +385,11 @@
       if (res.status < 200 || res.status >= 400) {
         return callback(new Error("HTTP " + res.status + " for " + targetUrl));
       }
-      callback(null, res.buffer.toString("utf8"), res);
+      try {
+        callback(null, res.buffer.toString("utf8"), res);
+      } catch (parseErr) {
+        callback(parseErr);
+      }
     });
   }
 
@@ -344,11 +427,11 @@
   }
 
   function pickTitle(titleList, mainTitle) {
-    if (titleList && typeof titleList === "object" && !Array.isArray(titleList)) {
+    if (titleList && typeof titleList === "object" && !isArr(titleList)) {
       if (titleList["1"]) return decodeHtmlEntities(titleList["1"]);
       if (titleList["4"]) return decodeHtmlEntities(titleList["4"]);
       if (titleList["5"]) return decodeHtmlEntities(titleList["5"]);
-      var vals = Object.values(titleList);
+      var vals = objValues(titleList);
       if (vals.length > 0 && vals[0]) return decodeHtmlEntities(vals[0]);
     }
     if (mainTitle) return decodeHtmlEntities(mainTitle);
@@ -362,7 +445,7 @@
       ? decodeHtmlEntities(item.main_title)
       : ((item.title_list && item.title_list["5"]) ? decodeHtmlEntities(item.title_list["5"]) : "");
     var genres = [];
-    if (Array.isArray(item.tags)) {
+    if (isArr(item.tags)) {
       for (var i = 0; i < item.tags.length; i++) {
         if (item.tags[i] && item.tags[i].name) genres.push(item.tags[i].name);
       }
@@ -396,9 +479,9 @@
     fetchRemoteText(SOURCE_ORIGIN + "/", null, function (err, html) {
       if (err) return callback(err);
       var blocks = extractJsonParseBlocks(html);
-      var recentRaw = Array.isArray(blocks[0]) ? blocks[0] : [];
-      var genresRaw = Array.isArray(blocks[1]) ? blocks[1] : [];
-      var featuredRaw = Array.isArray(blocks[2]) ? blocks[2] : [];
+      var recentRaw = isArr(blocks[0]) ? blocks[0] : [];
+      var genresRaw = isArr(blocks[1]) ? blocks[1] : [];
+      var featuredRaw = isArr(blocks[2]) ? blocks[2] : [];
 
       var recentEpisodes = [];
       for (var i = 0; i < recentRaw.length; i++) {
@@ -470,7 +553,7 @@
       var blocks = extractJsonParseBlocks(html);
       var itemsRaw = [];
       for (var i = 0; i < blocks.length; i++) {
-        if (Array.isArray(blocks[i])) {
+        if (isArr(blocks[i])) {
           itemsRaw = blocks[i];
           break;
         }
@@ -518,8 +601,8 @@
       if (err) return callback(err);
 
       var blocks = extractJsonParseBlocks(html);
-      var titleMap = (blocks[0] && typeof blocks[0] === "object" && !Array.isArray(blocks[0])) ? blocks[0] : {};
-      var epsRaw = Array.isArray(blocks[1]) ? blocks[1] : (Array.isArray(blocks[0]) ? blocks[0] : []);
+      var titleMap = (blocks[0] && typeof blocks[0] === "object" && !isArr(blocks[0])) ? blocks[0] : {};
+      var epsRaw = isArr(blocks[1]) ? blocks[1] : (isArr(blocks[0]) ? blocks[0] : []);
 
       var fallbackTitleMatch = html.match(/getTitle\(this\.anmTitles,\s*'([^']+)'\)/);
       var fallbackTitle = fallbackTitleMatch ? fallbackTitleMatch[1] : animeId;
@@ -531,7 +614,7 @@
       var imgs = html.match(/https:\/\/anizone\.to\/images\/anime\/[^\s"'\\]+/g) || [];
       var uniqueImgs = [];
       for (var i = 0; i < imgs.length; i++) {
-        if (!uniqueImgs.includes(imgs[i])) uniqueImgs.push(imgs[i]);
+        if (!arrContains(uniqueImgs, imgs[i])) uniqueImgs.push(imgs[i]);
       }
       var banner = uniqueImgs[0] || "";
       var poster = uniqueImgs[1] || uniqueImgs[0] || "";
@@ -556,7 +639,7 @@
       var gm;
       while ((gm = genreRe.exec(html)) !== null) {
         var gName = decodeHtmlEntities(gm[1]);
-        if (!genres.includes(gName)) genres.push(gName);
+        if (!arrContains(genres, gName)) genres.push(gName);
       }
 
       var episodes = [];
@@ -691,7 +774,7 @@
       /* Extract current episode title if present */
       var blocks = extractJsonParseBlocks(html);
       var epTitle = "Episode " + episodeNumber;
-      if (blocks.length >= 2 && typeof blocks[1] === "object" && !Array.isArray(blocks[1])) {
+      if (blocks.length >= 2 && typeof blocks[1] === "object" && !isArr(blocks[1])) {
         var picked = pickTitle(blocks[1], "");
         if (picked && picked !== "Untitled") epTitle = picked;
       }
@@ -712,7 +795,7 @@
         var activeAudio = (requestedAudio === "dub" && hasDub) ? "dub" : "sub";
         var proxiedStreamUrl = "http://" + HOST + ":" + PORT + "/proxy?url=" + encodeURIComponent(rawM3u8Url) + "&audio=" + encodeURIComponent(activeAudio);
 
-        var rawSubs = Array.isArray(playerData.subtitles) ? playerData.subtitles : [];
+        var rawSubs = isArr(playerData.subtitles) ? playerData.subtitles : [];
         var subtitles = [];
         for (var s = 0; s < rawSubs.length; s++) {
           var sub = rawSubs[s];
@@ -917,7 +1000,7 @@
       res.end(JSON.stringify({
         ok: true,
         service: "my-anime-tizenbrew",
-        version: "1.0.0",
+        version: "1.0.1",
         port: PORT,
         historyFile: HISTORY_FILE
       }));
@@ -937,6 +1020,7 @@
             msg = JSON.parse(bodyStr || "{}");
           } catch (e) {}
           dispatchAction(msg.action, msg.payload || {}, function (err, data) {
+            if (res.headersSent) return;
             res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
             if (err) {
               res.end(JSON.stringify({ id: msg.id, action: msg.action, ok: false, error: err.message || String(err) }));
@@ -949,6 +1033,7 @@
       } else {
         var act = query.action || "ping";
         dispatchAction(act, query, function (err, data) {
+          if (res.headersSent) return;
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
           if (err) {
             res.end(JSON.stringify({ action: act, ok: false, error: err.message || String(err) }));
@@ -1281,9 +1366,25 @@
   });
 
   server.listen(PORT, HOST, function () {
-    if (typeof global !== "undefined") {
-      global.__MY_ANIME_SERVICE_SERVER__ = server;
-    }
+    try {
+      if (typeof process !== "undefined" && process) {
+        process.__MY_ANIME_SERVICE_SERVER__ = server;
+      }
+    } catch (e) {}
     console.log("[MyAnimeService] Listening on http://" + HOST + ":" + PORT + " and ws://" + HOST + ":" + PORT);
   });
+
+  /* Also bind port 8092 if free so any cached v1.0.0 client gets the fixed service */
+  try {
+    var legacyServer = http.createServer(server.listeners("request")[0]);
+    legacyServer.on("upgrade", server.listeners("upgrade")[0]);
+    legacyServer.on("error", function () {});
+    legacyServer.listen(8092, HOST, function () {
+      try {
+        if (typeof process !== "undefined" && process) {
+          process.__MY_ANIME_LEGACY_SERVER__ = legacyServer;
+        }
+      } catch (e) {}
+    });
+  } catch (e) {}
 })();
