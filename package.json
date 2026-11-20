@@ -1,0 +1,26 @@
+{
+  "name": "my-anime-tizenbrew",
+  "version": "1.0.0",
+  "appName": "My Anime",
+  "description": "Standalone ad-free Anime app for Samsung Tizen 3.0 TVs with on-TV Node.js service & HLS/VTT proxy",
+  "packageType": "mods",
+  "websiteURL": "http://127.0.0.1:8081/my-anime",
+  "main": "dist/index.js",
+  "serviceFile": "dist/service.js",
+  "keys": [
+    "MediaPlayPause",
+    "MediaPlay",
+    "MediaPause",
+    "MediaStop",
+    "MediaFastForward",
+    "MediaRewind",
+    "MediaTrackNext",
+    "MediaTrackPrevious"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "start:service": "node dist/service.js"
+  },
+  "author": "AllanCFE",
+  "license": "MIT"
+}
