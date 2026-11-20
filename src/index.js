@@ -170,11 +170,15 @@
 
     /* Home & Search state */
     searchQuery: "",
+    searchDraft: "",
+    keyboardOpen: false,
     isSearching: false,
     searchResults: null,
     featured: [],
     recentEpisodes: [],
     history: loadLocalHistoryBackup(),
+    homeRetryCount: 0,
+    pageScrollY: 0,
 
     /* Anime Details state */
     currentAnime: null,
@@ -459,8 +463,8 @@
   var toastEl = null;
 
   var TV_CSS = [
-    "html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #08090c; color: #f3f4f6; font-family: 'SamsungOne', 'Samsung Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none; }",
-    "#my-anime-root { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; background: #08090c; -webkit-transform-origin: 0 0; transform-origin: 0 0; }",
+    "html, body { position: fixed; left: 0; top: 0; margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #08090c; color: #f3f4f6; font-family: 'SamsungOne', 'Samsung Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none; -webkit-text-size-adjust: 100%; }",
+    "#my-anime-root { position: fixed; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; background: #08090c; -webkit-transform-origin: 0 0; transform-origin: 0 0; }",
     "#my-anime-root * { box-sizing: border-box; }",
     "/* Header */",
     ".ma-header { position: absolute; left: 0; top: 0; right: 0; height: 108px; padding: 0 72px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; background: -webkit-linear-gradient(top, rgba(8,9,12,0.98), rgba(8,9,12,0.85)); background: linear-gradient(to bottom, rgba(8,9,12,0.98), rgba(8,9,12,0.85)); border-bottom: 1px solid rgba(255,255,255,0.07); z-index: 20; }",
@@ -468,9 +472,10 @@
     ".ma-logo-dot { width: 18px; height: 18px; border-radius: 50%; background: #ff5a36; margin-right: 14px; box-shadow: 0 0 16px rgba(255,90,54,0.7); }",
     ".ma-brand-title { font-size: 34px; font-weight: 800; letter-spacing: -0.6px; color: #ffffff; }",
     ".ma-brand-sub { font-size: 18px; font-weight: 600; color: #9ca3af; margin-left: 12px; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.08); }",
-    ".ma-search-box { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 620px; height: 62px; padding: 0 22px; border-radius: 14px; background: #141720; border: 3px solid rgba(255,255,255,0.1); margin-right: 16px; -webkit-transition: all 0.15s ease; transition: all 0.15s ease; }",
+    ".ma-search-box { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 620px; height: 62px; padding: 0 22px; border-radius: 14px; background: #141720; border: 3px solid rgba(255,255,255,0.1); margin-right: 16px; -webkit-transition: all 0.15s ease; transition: all 0.15s ease; cursor: pointer; }",
     ".ma-search-box.focused { border-color: #ffffff; background: #1c202c; -webkit-transform: scale(1.02); transform: scale(1.02); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }",
-    ".ma-search-input { width: 100%; height: 54px; border: 0; outline: 0; background: transparent; color: #ffffff; font-size: 25px; font-family: inherit; }",
+    ".ma-search-text { width: 100%; font-size: 24px; font-weight: 600; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+    ".ma-search-text.placeholder { color: #6b7280; font-weight: 500; }",
     ".ma-btn { display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; height: 62px; padding: 0 28px; margin-right: 16px; border-radius: 14px; background: rgba(255,255,255,0.12); color: #ffffff; font-size: 23px; font-weight: 700; white-space: nowrap; border: 3px solid transparent; -webkit-transition: -webkit-transform 0.15s ease, background-color 0.15s ease, color 0.15s ease; transition: transform 0.15s ease, background-color 0.15s ease, color 0.15s ease; }",
     ".ma-btn.primary { background: #ff5a36; color: #ffffff; }",
     ".ma-btn.accent { background: #2563eb; color: #ffffff; }",
@@ -478,15 +483,30 @@
     ".ma-status { margin-left: auto; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; font-size: 19px; font-weight: 600; color: #9ca3af; background: rgba(255,255,255,0.06); padding: 10px 18px; border-radius: 24px; }",
     ".ma-status-dot { width: 11px; height: 11px; border-radius: 50%; margin-right: 10px; background: #f59e0b; }",
     ".ma-status-dot.online { background: #10b981; box-shadow: 0 0 10px rgba(16,185,129,0.7); }",
+    "/* On-Screen TV Keyboard Modal */",
+    ".ma-kb-modal { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(6,7,10,0.88); z-index: 150; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }",
+    ".ma-kb-panel { width: 1260px; padding: 38px 46px; border-radius: 24px; background: #12151f; border: 2px solid rgba(255,255,255,0.14); box-shadow: 0 24px 64px rgba(0,0,0,0.85); }",
+    ".ma-kb-header { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between; margin-bottom: 20px; }",
+    ".ma-kb-title { font-size: 30px; font-weight: 800; color: #ffffff; }",
+    ".ma-kb-hint { font-size: 20px; font-weight: 600; color: #9ca3af; }",
+    ".ma-kb-display { width: 100%; height: 74px; padding: 0 26px; margin-bottom: 22px; border-radius: 16px; background: #090b10; border: 3px solid #ff5a36; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; font-size: 32px; font-weight: 700; color: #ffffff; }",
+    ".ma-kb-chips { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin-bottom: 22px; }",
+    ".ma-kb-chip { height: 48px; line-height: 44px; padding: 0 20px; margin-right: 12px; margin-bottom: 8px; border-radius: 24px; background: rgba(255,255,255,0.08); color: #d1d5db; font-size: 20px; font-weight: 600; border: 2px solid transparent; }",
+    ".ma-kb-chip.focused { background: #ffffff !important; color: #08090c !important; -webkit-transform: scale(1.06); transform: scale(1.06); }",
+    ".ma-kb-grid-row { display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; margin-bottom: 12px; }",
+    ".ma-kb-key { width: 106px; height: 68px; border-radius: 12px; background: #1b2030; color: #ffffff; font-size: 28px; font-weight: 800; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; border: 3px solid rgba(255,255,255,0.06); -webkit-transition: transform 0.12s ease, background-color 0.12s ease; transition: transform 0.12s ease, background-color 0.12s ease; }",
+    ".ma-kb-key.wide { width: 222px; font-size: 23px; }",
+    ".ma-kb-key.primary { background: #ff5a36; }",
+    ".ma-kb-key.focused { background: #ffffff !important; color: #08090c !important; border-color: #ffffff !important; -webkit-transform: scale(1.08); transform: scale(1.08); box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 4; }",
     "/* Scrollable Content Area */",
     ".ma-content { position: absolute; left: 0; top: 108px; right: 0; bottom: 0; overflow: hidden; }",
-    ".ma-scroll-page { position: absolute; left: 0; top: 0; width: 1920px; padding: 28px 0 120px 0; -webkit-transition: -webkit-transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1); transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1); }",
+    ".ma-scroll-page { position: absolute; left: 0; top: 0; width: 1920px; padding: 28px 0 180px 0; -webkit-transition: -webkit-transform 0.26s cubic-bezier(0.2, 0.7, 0.2, 1); transition: transform 0.26s cubic-bezier(0.2, 0.7, 0.2, 1); }",
     "/* Sections & Horizontal Rails */",
-    ".ma-section { margin-bottom: 42px; }",
+    ".ma-section { position: relative; margin-bottom: 42px; }",
     ".ma-section-header { padding: 0 72px; margin-bottom: 18px; display: -webkit-flex; display: flex; -webkit-align-items: baseline; align-items: baseline; }",
     ".ma-section-title { font-size: 30px; font-weight: 800; color: #ffffff; letter-spacing: -0.4px; }",
     ".ma-section-sub { font-size: 20px; font-weight: 600; color: #9ca3af; margin-left: 16px; }",
-    ".ma-rail-viewport { width: 1920px; overflow: hidden; padding: 14px 0 20px 0; margin: -14px 0 -20px 0; }",
+    ".ma-rail-viewport { position: relative; width: 1920px; overflow: hidden; padding: 14px 0 20px 0; margin: -14px 0 -20px 0; }",
     ".ma-rail-track { display: -webkit-flex; display: flex; padding-left: 72px; -webkit-transition: -webkit-transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1); transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1); }",
     "/* Cards */",
     ".ma-card { position: relative; width: 248px; margin-right: 26px; -webkit-flex-shrink: 0; flex-shrink: 0; -webkit-transition: -webkit-transform 0.16s ease; transition: transform 0.16s ease; }",
@@ -504,7 +524,7 @@
     ".ma-card.focused .ma-card-title { color: #ffffff; }",
     ".ma-card-meta { margin-top: 4px; font-size: 18px; font-weight: 500; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
     "/* Grid rows (6 cards per row) */",
-    ".ma-grid-row { display: -webkit-flex; display: flex; padding: 0 72px; margin-bottom: 34px; }",
+    ".ma-grid-row { position: relative; display: -webkit-flex; display: flex; padding: 0 72px; margin-bottom: 34px; }",
     "/* Details View */",
     ".ma-details-hero { position: relative; padding: 36px 72px 32px 72px; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }",
     ".ma-details-poster { width: 290px; height: 420px; border-radius: 16px; overflow: hidden; background: #161923; -webkit-flex-shrink: 0; flex-shrink: 0; margin-right: 44px; box-shadow: 0 18px 40px rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.1); }",
@@ -517,12 +537,12 @@
     ".ma-details-synopsis { font-size: 23px; line-height: 34px; color: #d1d5db; max-height: 136px; overflow: hidden; margin-bottom: 26px; max-width: 1280px; }",
     ".ma-details-actions { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }",
     "/* Episode Chunks & List */",
-    ".ma-chunks-row { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; padding: 0 72px; margin-bottom: 22px; }",
+    ".ma-chunks-row { position: relative; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; padding: 0 72px; margin-bottom: 22px; }",
     ".ma-chunk-btn { height: 50px; line-height: 46px; padding: 0 22px; margin-right: 12px; margin-bottom: 10px; border-radius: 25px; background: #161923; color: #9ca3af; font-size: 20px; font-weight: 700; border: 2px solid rgba(255,255,255,0.08); }",
     ".ma-chunk-btn.active { background: rgba(255,90,54,0.25); color: #ffffff; border-color: #ff5a36; }",
     ".ma-chunk-btn.focused { background: #ffffff !important; color: #08090c !important; border-color: #ffffff !important; -webkit-transform: scale(1.06); transform: scale(1.06); }",
-    ".ma-ep-list { padding: 0 72px; }",
-    ".ma-ep-row { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding: 16px 22px; margin-bottom: 14px; border-radius: 16px; background: #12151e; border: 3px solid transparent; -webkit-transition: all 0.15s ease; transition: all 0.15s ease; }",
+    ".ma-ep-list { position: relative; padding: 0 72px; }",
+    ".ma-ep-row { position: relative; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding: 16px 22px; margin-bottom: 14px; border-radius: 16px; background: #12151e; border: 3px solid transparent; -webkit-transition: all 0.15s ease; transition: all 0.15s ease; }",
     ".ma-ep-row.focused { background: #1d2230; border-color: #ffffff; -webkit-transform: scale(1.015); transform: scale(1.015); box-shadow: 0 12px 30px rgba(0,0,0,0.6); }",
     ".ma-ep-thumb { position: relative; width: 224px; height: 126px; border-radius: 10px; overflow: hidden; background: #1c202c; -webkit-flex-shrink: 0; flex-shrink: 0; margin-right: 26px; }",
     ".ma-ep-thumb img { width: 100%; height: 100%; object-fit: cover; }",
@@ -568,6 +588,12 @@
     meta.setAttribute("charset", "utf-8");
     head.appendChild(meta);
 
+    /* Lock viewport scale so Tizen 3.0 never zooms out */
+    var vp = document.createElement("meta");
+    vp.setAttribute("name", "viewport");
+    vp.setAttribute("content", "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no");
+    head.appendChild(vp);
+
     var titleEl = document.createElement("title");
     titleEl.textContent = "My Anime - TizenBrew";
     head.appendChild(titleEl);
@@ -590,9 +616,14 @@
     toastEl.style.opacity = "0";
     rootEl.appendChild(toastEl);
 
+    var initialW = window.innerWidth || document.documentElement.clientWidth || 1920;
+    var initialH = window.innerHeight || document.documentElement.clientHeight || 1080;
+
     function updateScale() {
-      var sx = (window.innerWidth || 1920) / 1920;
-      var sy = (window.innerHeight || 1080) / 1080;
+      var w = window.innerWidth || initialW || 1920;
+      var h = window.innerHeight || initialH || 1080;
+      var sx = w / 1920;
+      var sy = h / 1080;
       var s = Math.min(sx, sy) || 1;
       var tr = Math.abs(s - 1) < 0.005 ? "" : ("scale(" + s + ")");
       rootEl.style.webkitTransform = tr;
@@ -632,7 +663,12 @@
 
   function getFocusableElements() {
     if (!mainViewEl) return [];
-    var list = mainViewEl.querySelectorAll("[data-focusable='true']");
+    var scope = mainViewEl;
+    if (state.keyboardOpen) {
+      var kbModal = document.getElementById("ma-keyboard-modal");
+      if (kbModal) scope = kbModal;
+    }
+    var list = scope.querySelectorAll("[data-focusable='true']");
     var out = [];
     for (var i = 0; i < list.length; i++) {
       var el = list[i];
@@ -647,21 +683,18 @@
     if (!el) return;
     if (currentFocusedEl && currentFocusedEl !== el) {
       currentFocusedEl.classList.remove("focused");
-      if (currentFocusedEl.tagName === "INPUT" && document.activeElement === currentFocusedEl) {
-        currentFocusedEl.blur();
-      }
     }
     currentFocusedEl = el;
     el.classList.add("focused");
 
     var fid = el.getAttribute("data-focus-id");
     var rowId = el.getAttribute("data-row-id");
-    if (fid) {
+    if (fid && !state.keyboardOpen) {
       lastFocusedIdByView[state.view] = fid;
       if (rowId) lastFocusedIdByRow[rowId] = fid;
     }
 
-    if (!skipScroll) {
+    if (!skipScroll && !state.keyboardOpen) {
       scrollFocusedIntoView(el);
     }
   }
@@ -670,7 +703,7 @@
     var focusables = getFocusableElements();
     if (focusables.length === 0) return;
 
-    var targetId = defaultId || lastFocusedIdByView[state.view];
+    var targetId = defaultId || (!state.keyboardOpen ? lastFocusedIdByView[state.view] : null);
     if (targetId) {
       for (var i = 0; i < focusables.length; i++) {
         if (focusables[i].getAttribute("data-focus-id") === targetId) {
@@ -684,7 +717,7 @@
 
   function getOffsetRelativeTo(el, ancestor) {
     var top = 0, left = 0, cur = el;
-    while (cur && cur !== ancestor) {
+    while (cur && cur !== ancestor && cur !== document.body) {
       top += cur.offsetTop || 0;
       left += cur.offsetLeft || 0;
       cur = cur.offsetParent;
@@ -712,24 +745,36 @@
       track.style.transform = tx;
     }
 
-    /* 2. Vertical page scrolling */
+    /* 2. Vertical page scrolling (uses specific row anchor, NOT outer section!) */
     var page = mainViewEl ? mainViewEl.querySelector(".ma-scroll-page") : null;
     if (page && page.parentElement) {
       if (findAncestor(el, "ma-header")) {
+        state.pageScrollY = 0;
         page.style.webkitTransform = "translate3d(0, 0, 0)";
         page.style.transform = "translate3d(0, 0, 0)";
         return;
       }
       var viewH = page.parentElement.clientHeight || 972;
-      var anchor = findAncestor(el, "ma-section") || findAncestor(el, "ma-grid-row") || findAncestor(el, "ma-ep-row") || findAncestor(el, "ma-details-hero") || el;
+      var anchor =
+        findAncestor(el, "ma-grid-row") ||
+        findAncestor(el, "ma-ep-row") ||
+        findAncestor(el, "ma-chunks-row") ||
+        findAncestor(el, "ma-rail-viewport") ||
+        findAncestor(el, "ma-details-hero") ||
+        el;
+
       var rel = getOffsetRelativeTo(anchor, page);
-      var itemH = anchor.offsetHeight || 200;
+      var itemH = anchor.offsetHeight || 220;
       var targetY = 0;
-      if (rel.top + itemH > viewH - 60) {
-        targetY = Math.max(0, rel.top - 110);
+
+      if (rel.top > 240) {
+        targetY = Math.max(0, rel.top - Math.round((viewH - Math.min(itemH, 420)) * 0.35));
       }
-      var maxScrollY = Math.max(0, page.offsetHeight - viewH + 80);
+      var pageH = Math.max(page.scrollHeight || 0, page.offsetHeight || 0);
+      var maxScrollY = Math.max(0, pageH - viewH + 100);
       targetY = Math.min(targetY, maxScrollY);
+      state.pageScrollY = targetY;
+
       var ty = "translate3d(0, " + (-Math.round(targetY)) + "px, 0)";
       page.style.webkitTransform = ty;
       page.style.transform = ty;
@@ -758,7 +803,6 @@
     var curCy = (curRect.top + curRect.bottom) / 2;
     var curRow = currentFocusedEl.getAttribute("data-row-id");
 
-    /* First check if moving left/right within the same row */
     var bestEl = null;
     var bestScore = Infinity;
 
@@ -806,7 +850,7 @@
     if (bestEl) {
       /* If switching rows vertically, check if the target row has a remembered element */
       var targetRow = bestEl.getAttribute("data-row-id");
-      if ((direction === "up" || direction === "down") && targetRow && targetRow !== curRow && lastFocusedIdByRow[targetRow]) {
+      if (!state.keyboardOpen && (direction === "up" || direction === "down") && targetRow && targetRow !== curRow && lastFocusedIdByRow[targetRow]) {
         var rememberedId = lastFocusedIdByRow[targetRow];
         for (var j = 0; j < focusables.length; j++) {
           if (focusables[j].getAttribute("data-focus-id") === rememberedId) {
@@ -824,18 +868,33 @@
   /* ==========================================================================
    * 7. DATA FETCHING & ACTIONS
    * ========================================================================== */
+  var homeFetchInFlight = false;
   function fetchHomeData() {
+    if (homeFetchInFlight) return;
+    homeFetchInFlight = true;
     state.loading = true;
     state.error = "";
     render();
 
     callService("getHome", {}, function (err, data) {
-      state.loading = false;
+      homeFetchInFlight = false;
       if (err || !data) {
+        if (state.featured.length === 0 && state.homeRetryCount < 15) {
+          state.homeRetryCount++;
+          state.loading = true;
+          state.error = "";
+          setTimeout(function () {
+            if (state.featured.length === 0) fetchHomeData();
+          }, 900);
+          return;
+        }
+        state.loading = false;
         state.error = (err && err.message) ? err.message : "Could not load catalog from on-TV service.";
         render();
         return;
       }
+      state.loading = false;
+      state.homeRetryCount = 0;
       state.featured = Array.isArray(data.featured) ? data.featured : [];
       state.recentEpisodes = Array.isArray(data.recentEpisodes) ? data.recentEpisodes : [];
       if (Array.isArray(data.history) && data.history.length > 0) {
@@ -1524,7 +1583,133 @@
       renderHomeScreen();
     }
 
+    if (state.keyboardOpen) {
+      renderKeyboardModal();
+    }
+
     restoreFocus(targetFocusId);
+  }
+
+  function openSearchKeyboard() {
+    state.searchDraft = state.searchQuery || "";
+    state.keyboardOpen = true;
+    render("kb-key-A");
+  }
+
+  function closeSearchKeyboard(focusTarget) {
+    state.keyboardOpen = false;
+    render(focusTarget || "nav-search-input");
+  }
+
+  function updateKeyboardDraftDom() {
+    var disp = document.getElementById("ma-kb-display-text");
+    if (disp) {
+      disp.textContent = (state.searchDraft || "") + "▌";
+    }
+  }
+
+  function renderKeyboardModal() {
+    var modal = createEl("div", "ma-kb-modal");
+    modal.id = "ma-keyboard-modal";
+
+    var panel = createEl("div", "ma-kb-panel");
+
+    var head = createEl("div", "ma-kb-header");
+    head.appendChild(createEl("div", "ma-kb-title", "Search Anime"));
+    head.appendChild(createEl("div", "ma-kb-hint", "D-Pad Arrows + OK to type  ·  BACK to close"));
+    panel.appendChild(head);
+
+    var disp = createEl("div", "ma-kb-display");
+    var dispText = createEl("span", "", (state.searchDraft || "") + "▌");
+    dispText.id = "ma-kb-display-text";
+    disp.appendChild(dispText);
+    panel.appendChild(disp);
+
+    /* Quick Popular Search Suggestions */
+    var quickList = ["Naruto", "One Piece", "Bleach", "Dragon Ball", "Attack on Titan", "Demon Slayer", "Hunter x Hunter", "Jujutsu Kaisen"];
+    var chipsRow = createEl("div", "ma-kb-chips");
+    for (var q = 0; q < quickList.length; q++) {
+      (function (qName, qIdx) {
+        var chip = createEl("div", "ma-kb-chip", qName);
+        makeFocusable(chip, "kb-chip-" + qIdx, "kb-row-chips", function () {
+          state.keyboardOpen = false;
+          if (state.view !== "home") state.view = "home";
+          performSearch(qName);
+        });
+        chipsRow.appendChild(chip);
+      })(quickList[q], q);
+    }
+    panel.appendChild(chipsRow);
+
+    /* Character Grid (4 rows of 10 keys) */
+    var rows = [
+      ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+      ["K", "L", "M", "N", "O", "P", "Q", "R", "S", "T"],
+      ["U", "V", "W", "X", "Y", "Z", "0", "1", "2", "3"],
+      ["4", "5", "6", "7", "8", "9", "-", ":", "'", "."]
+    ];
+
+    for (var r = 0; r < rows.length; r++) {
+      var rowEl = createEl("div", "ma-kb-grid-row");
+      var rId = "kb-row-" + r;
+      for (var c = 0; c < rows[r].length; c++) {
+        (function (ch) {
+          var keyBtn = createEl("div", "ma-kb-key", ch);
+          makeFocusable(keyBtn, "kb-key-" + ch, rId, function () {
+            state.searchDraft = (state.searchDraft || "") + ch.toLowerCase();
+            updateKeyboardDraftDom();
+          });
+          rowEl.appendChild(keyBtn);
+        })(rows[r][c]);
+      }
+      panel.appendChild(rowEl);
+    }
+
+    /* Action Row */
+    var actRow = createEl("div", "ma-kb-grid-row");
+    actRow.style.marginTop = "16px";
+
+    var spaceKey = createEl("div", "ma-kb-key wide", "␣ Space");
+    makeFocusable(spaceKey, "kb-act-space", "kb-row-actions", function () {
+      state.searchDraft = (state.searchDraft || "") + " ";
+      updateKeyboardDraftDom();
+    });
+    actRow.appendChild(spaceKey);
+
+    var bkspKey = createEl("div", "ma-kb-key wide", "⌫ Backspace");
+    makeFocusable(bkspKey, "kb-act-bksp", "kb-row-actions", function () {
+      if (state.searchDraft && state.searchDraft.length > 0) {
+        state.searchDraft = state.searchDraft.slice(0, -1);
+        updateKeyboardDraftDom();
+      }
+    });
+    actRow.appendChild(bkspKey);
+
+    var clearKey = createEl("div", "ma-kb-key wide", "Clear");
+    makeFocusable(clearKey, "kb-act-clear", "kb-row-actions", function () {
+      state.searchDraft = "";
+      updateKeyboardDraftDom();
+    });
+    actRow.appendChild(clearKey);
+
+    var submitKey = createEl("div", "ma-kb-key wide primary", "🔍 Search");
+    makeFocusable(submitKey, "kb-act-submit", "kb-row-actions", function () {
+      var finalQ = (state.searchDraft || "").trim();
+      state.keyboardOpen = false;
+      if (state.view !== "home") state.view = "home";
+      performSearch(finalQ);
+    });
+    actRow.appendChild(submitKey);
+
+    var cancelKey = createEl("div", "ma-kb-key wide", "Cancel");
+    makeFocusable(cancelKey, "kb-act-cancel", "kb-row-actions", function () {
+      closeSearchKeyboard("nav-search-input");
+    });
+    actRow.appendChild(cancelKey);
+
+    panel.appendChild(actRow);
+    modal.appendChild(panel);
+    mainViewEl.appendChild(modal);
   }
 
   function renderHeader() {
@@ -1545,35 +1730,24 @@
       header.appendChild(homeBtn);
     }
 
-    /* Search Input Bar */
+    /* Search Bar Button (opens built-in TV On-Screen Keyboard — no native <input> zoom bug) */
     var searchBox = createEl("div", "ma-search-box");
-    var searchInput = createEl("input", "ma-search-input");
-    searchInput.type = "text";
-    searchInput.placeholder = "Search anime titles (e.g. Naruto, One Piece)...";
-    searchInput.value = state.searchQuery;
-    searchInput.oninput = function (e) {
-      state.searchQuery = e.target.value;
-    };
-    searchInput.onkeydown = function (e) {
-      if (e.keyCode === 13 || e.keyCode === 65376) {
-        e.preventDefault();
-        e.stopPropagation();
-        searchInput.blur();
-        if (state.view !== "home") state.view = "home";
-        performSearch(searchInput.value);
-      }
-    };
-    searchBox.appendChild(searchInput);
+    var hasQ = !!(state.searchQuery && state.searchQuery.trim());
+    var searchText = createEl(
+      "div",
+      "ma-search-text" + (hasQ ? "" : " placeholder"),
+      hasQ ? ("🔍 " + state.searchQuery) : "🔍 Search anime titles (e.g. Naruto, One Piece)..."
+    );
+    searchBox.appendChild(searchText);
 
     makeFocusable(searchBox, "nav-search-input", "header", function () {
-      searchInput.focus();
+      openSearchKeyboard();
     });
     header.appendChild(searchBox);
 
     var searchBtn = createEl("div", "ma-btn primary", "Search");
     makeFocusable(searchBtn, "nav-search-btn", "header", function () {
-      if (state.view !== "home") state.view = "home";
-      performSearch(searchInput.value);
+      openSearchKeyboard();
     });
     header.appendChild(searchBtn);
 
@@ -2129,23 +2303,42 @@
   /* ==========================================================================
    * 10. GLOBAL KEYBOARD / REMOTE D-PAD HANDLER
    * ========================================================================== */
-  function isInputFocused() {
-    var act = document.activeElement;
-    return !!(act && (act.tagName === "INPUT" || act.tagName === "TEXTAREA"));
-  }
-
   function handleKeyDown(e) {
     var code = e.keyCode;
 
-    /* If typing inside the Search <input>, let typing work normally */
-    if (isInputFocused()) {
-      if (code === 40) { /* Down arrow leaves input box */
+    /* On-Screen TV Keyboard Modal Key Handling */
+    if (state.keyboardOpen) {
+      if (code === 10009 || code === 27 || code === 65385) { /* Return/Back closes keyboard */
         e.preventDefault();
-        document.activeElement.blur();
-        moveFocus("down");
-      } else if (code === 10009 || code === 27 || code === 65385) { /* Back/Cancel */
+        closeSearchKeyboard("nav-search-input");
+        return;
+      }
+      if (code === 8) { /* Backspace deletes last char */
         e.preventDefault();
-        document.activeElement.blur();
+        if (state.searchDraft && state.searchDraft.length > 0) {
+          state.searchDraft = state.searchDraft.slice(0, -1);
+          updateKeyboardDraftDom();
+        }
+        return;
+      }
+      if (code === 37) { e.preventDefault(); moveFocus("left"); return; }
+      if (code === 39) { e.preventDefault(); moveFocus("right"); return; }
+      if (code === 38) { e.preventDefault(); moveFocus("up"); return; }
+      if (code === 40) { e.preventDefault(); moveFocus("down"); return; }
+      if (code === 13) {
+        e.preventDefault();
+        if (currentFocusedEl && currentFocusedEl.__onSelect) {
+          currentFocusedEl.__onSelect();
+        }
+        return;
+      }
+      /* Support physical keyboard letters/digits if connected */
+      if ((code >= 65 && code <= 90) || (code >= 48 && code <= 57) || code === 32) {
+        e.preventDefault();
+        var ch = String.fromCharCode(code).toLowerCase();
+        state.searchDraft = (state.searchDraft || "") + ch;
+        updateKeyboardDraftDom();
+        return;
       }
       return;
     }
