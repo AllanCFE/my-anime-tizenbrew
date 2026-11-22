@@ -1,6 +1,6 @@
 {
   "name": "my-anime-tizenbrew",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "appName": "My Anime",
   "description": "Standalone ad-free Anime app for Samsung Tizen 3.0 TVs with on-TV Node.js service & HLS/VTT proxy",
   "packageType": "mods",

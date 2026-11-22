@@ -565,7 +565,8 @@
     ".ma-seek-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 7px; background: #ff5a36; }",
     ".ma-seek-knob { position: absolute; top: -7px; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%; background: #ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.7); }",
     ".ma-player-controls { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }",
-    ".ma-player-time { margin-left: auto; font-size: 26px; font-weight: 700; color: #e5e7eb; }",
+    ".ma-player-controls .ma-btn { height: 58px; padding: 0 20px; margin-right: 12px; font-size: 21px; }",
+    ".ma-player-time { margin-left: auto; font-size: 24px; font-weight: 700; color: #e5e7eb; white-space: nowrap; }",
     ".ma-buffer-overlay { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; background: rgba(0,0,0,0.45); z-index: 108; pointer-events: none; }",
     ".ma-spinner { width: 72px; height: 72px; border-radius: 50%; border: 6px solid rgba(255,255,255,0.2); border-top-color: #ff5a36; -webkit-animation: ma-spin 0.85s linear infinite; animation: ma-spin 0.85s linear infinite; }",
     "@-webkit-keyframes ma-spin { to { -webkit-transform: rotate(360deg); } }",
@@ -2235,6 +2236,15 @@
       seekPlayerBy(10);
     });
     controls.appendChild(ffBtn);
+
+    /* On-Screen "Skip Intro (80s)" Button */
+    var skipIntroBtn = createEl("div", "ma-btn primary", "⏭ Skip Intro (80s)");
+    skipIntroBtn.id = "btn-player-skip-intro";
+    makeFocusable(skipIntroBtn, "btn-player-skip-intro", "row-player-btns", function () {
+      seekPlayerBy(80);
+      showToast("Skipped Intro (+80s)");
+    });
+    controls.appendChild(skipIntroBtn);
 
     /* On-Screen "Next Episode" Button */
     var nextBtn = createEl("div", "ma-btn accent", "⏭ Next Episode");
